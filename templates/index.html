@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoVision — интерпретация палеорусел</title>
+    <!-- Подключаем стили из папки static -->
+    <link rel="stylesheet" href="/static/styles.css?v=2">
+</head>
+<body>
+
+    <!-- Верхняя панель -->
+    <header class="topbar">
+    <a href="/" class="brand">
+        <div class="brand-mark">GV</div>
+        <div>
+            <strong>GeoVision</strong>
+            <small>GEOLOGICAL INTERPRETATION</small>
+        </div>
+    </a>
+    
+    <div class="theme-switcher">
+        <button type="button" class="theme-button active" data-theme="light">☀️ Светлая</button>
+        <button type="button" class="theme-button" data-theme="dark"> Тёмная</button>
+        <button type="button" class="theme-button" data-theme="industrial">🏭 Индустриальная</button>
+    </div>
+    
+    <div id="modelStatus" class="status">
+        <span class="status-dot"></span>
+        <span>Проверка модели…</span>
+    </div>
+</header>
+
+    <main class="app-shell">
+        <!-- Левая панель управления -->
+        <aside class="control-panel">
+            <div class="panel-heading">
+                <div>
+                    <div class="step-number">ШАГ 01</div>
+                    <h1>Исходные данные</h1>
+                    <p>Полихромы и параметры предварительной оценки.</p>
+                </div>
+            </div>
+
+            <form id="analysisForm">
+                <div id="dropzone" class="dropzone">
+                    <div class="upload-icon">+</div>
+                    <strong>Выбрать изображения</strong>
+                    <span>или перетащить в эту область</span>
+                    <small>PNG · JPG · TIFF, до 20 файлов</small>
+                    <input type="file" id="files" name="files" multiple accept="image/*" hidden>
+                </div>
+                <div id="fileList" class="file-list"></div>
+
+                <details open>
+                    <summary>Масштаб и координаты</summary>
+                    <div class="fields-grid">
+                        <div class="field">
+                            <span>Размер пикселя, м</span>
+                            <input type="number" name="pixel_size_m" value="10" step="0.1" min="0.1">
+                        </div>
+                        <div class="field">
+                            <span>X левого верхнего угла</span>
+                            <input type="number" name="origin_x_m" step="0.1">
+                        </div>
+                        <div class="field">
+                            <span>Y левого верхнего угла</span>
+                            <input type="number" name="origin_y_m" step="0.1">
+                        </div>
+                    </div>
+                </details>
+
+                <details>
+                    <summary>Параметры коллектора</summary>
+                    <div class="fields-grid">
+                        <div class="field">
+                            <span>Эффективная толщина, м</span>
+                            <input type="number" name="effective_thickness_m" value="10" step="0.1" min="0.1">
+                        </div>
+                        <div class="field">
+                            <span>NTG (песчанистость)</span>
+                            <input type="number" name="net_to_gross" value="0.70" step="0.01" min="0" max="1">
+                        </div>
+                        <div class="field">
+                            <span>Пористость</span>
+                            <input type="number" name="porosity" value="0.20" step="0.01" min="0" max="1">
+                        </div>
+                        <div class="field">
+                            <span>Нефтенасыщенность</span>
+                            <input type="number" name="oil_saturation" value="0.70" step="0.01" min="0" max="1">
+                        </div>
+                        <div class="field">
+                            <span>Объёмный коэффициент</span>
+                            <input type="number" name="formation_volume_factor" value="1.20" step="0.01" min="0.1">
+                        </div>
+                        <div class="field">
+                            <span>КИН</span>
+                            <input type="number" name="recovery_factor" value="0.30" step="0.01" min="0" max="1">
+                        </div>
+                        <div class="field">
+                            <span>Плотность нефти, т/м³</span>
+                            <input type="number" name="oil_density_t_m3" value="0.85" step="0.01" min="0.1">
+                        </div>
+                        <div class="field">
+                            <span>Цена, $/барр.</span>
+                            <input type="number" name="oil_price_usd_bbl" value="70" step="1" min="0">
+                        </div>
+                    </div>
+                </details>
+
+                <button type="submit" id="analyzeButton" class="primary-button">
+                    <span>Выполнить интерпретацию</span>
+                    <span>→</span>
+                </button>
+                <p class="form-note">Результаты являются предварительной инженерной оценкой.</p>
+            </form>
+        </aside>
+
+        <!-- Правая рабочая область -->
+        <section class="workspace">
+            <div class="workspace-header">
+                <div>
+                    <div class="eyebrow">РАБОЧАЯ ОБЛАСТЬ</div>
+                    <h2>Интерпретация палеорусел</h2>
+                </div>
+                <div class="legend">
+                    <span><i class="legend-mask"></i> Маска</span>
+                    <span><i class="legend-probability"></i> Вероятность</span>
+                    <span><i class="legend-well"></i> Скважина</span>
+                </div>
+            </div>
+
+            <div id="message" class="message" hidden></div>
+            <div id="resultNavigator" class="result-navigator" hidden></div>
+
+            <div id="emptyState" class="empty-state">
+                <div class="empty-icon">⌁</div>
+                <h3>Загрузите полихром</h3>
+                <p>Результат интерпретации появится в этой области.</p>
+            </div>
+
+            <div id="loadingState" class="loading-state" hidden>
+                <div class="loader"></div>
+                <h3>Выполняется анализ</h3>
+                <p>U-Net строит маску и рассчитывает план скважин.</p>
+            </div>
+
+            <div id="results" class="results"></div>
+        </section>
+    </main>
+
+    <!-- Шаблон карточки результата -->
+    <template id="resultTemplate">
+        <article class="result-card">
+            <div class="result-title-row">
+                <div>
+                    <div class="result-index">01</div>
+                    <div>
+                        <h3 class="result-filename">filename.png</h3>
+                        <span class="edit-state" hidden>маска скорректирована геологом</span>
+                    </div>
+                </div>
+                <div class="result-resolution">1600 × 1200 px · 2.5 c</div>
+            </div>
+
+            <div class="viewer">
+                <div class="viewer-tabs">
+                    <button type="button" data-view="mask">Маска</button>
+                    <button type="button" data-view="probability">Карта вероятности</button>
+                    <button type="button" data-view="wells">Скважины</button>
+                    <button type="button" data-view="edit">Редактирование</button>
+                    
+                    <!-- НОВАЯ ВКЛАДКА СРАВНЕНИЯ -->
+                    <button type="button" data-view="swipe">🔍 Сравнение</button>
+                </div>
+
+                <div class="image-stage">
+                    <img class="result-image" alt="Результат">
+                    <canvas class="editor-canvas" hidden></canvas>
+                    
+                    <!-- НОВЫЙ БЛОК SWIPE -->
+                    <div class="swipe-container" hidden>
+                        <div class="swipe-wrapper">
+                            <img class="swipe-before" alt="Исходное изображение">
+                            <img class="swipe-after" alt="Результат интерпретации">
+                            <div class="swipe-handle">
+                                <div class="swipe-handle-grip">⇔</div>
+                            </div>
+                        </div>
+                        <div class="swipe-controls">
+                            <label for="swipe-layer">Сравнивать с:</label>
+                            <select class="swipe-layer-select" id="swipe-layer">
+                                <option value="wells">Рекомендуемые скважины</option>
+                                <option value="mask">Маска палеорусла</option>
+                                <option value="probability">Карта вероятности</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="probability-scale" hidden>
+                    <span>Низкая</span>
+                    <i></i>
+                    <span>Высокая</span>
+                </div>
+
+                <div class="editor-toolbar" hidden>
+                    <div class="tool-group">
+                        <button type="button" class="tool-button active" data-tool="brush">Кисть</button>
+                        <button type="button" class="tool-button" data-tool="eraser">Ластик</button>
+                    </div>
+                    <label>Размер
+                        <select class="brush-size">
+                            <option value="8">8 px</option>
+                            <option value="16" selected>16 px</option>
+                            <option value="32">32 px</option>
+                            <option value="64">64 px</option>
+                        </select>
+                    </label>
+                    <label>Исходник
+                        <select class="original-opacity">
+                            <option value="0.25">25%</option>
+                            <option value="0.5" selected>50%</option>
+                            <option value="0.75">75%</option>
+                            <option value="1">100%</option>
+                        </select>
+                    </label>
+                    <label>Маска
+                        <select class="mask-opacity">
+                            <option value="0.25">25%</option>
+                            <option value="0.5" selected>50%</option>
+                            <option value="0.75">75%</option>
+                            <option value="1">100%</option>
+                        </select>
+                    </label>
+                    <button type="button" class="quiet-button undo-mask">Отменить</button>
+                    <button type="button" class="quiet-button reset-mask">Сбросить</button>
+                    <button type="button" class="recalculate-button">Применить и пересчитать</button>
+                </div>
+            </div>
+
+            <div class="scenario-panel">
+                <div>
+                    <div class="eyebrow">СЦЕНАРИЙ БУРЕНИЯ</div>
+                    <h4>Автоматический расчёт количества</h4>
+                </div>
+                <div class="scenario-switch">
+                    <button type="button" data-scenario="minimum">
+                        <span>Минимум</span>
+                        <strong>0 скв.</strong>
+                    </button>
+                    <button type="button" data-scenario="recommended" class="active">
+                        <span>Оптимально</span>
+                        <strong>0 скв.</strong>
+                    </button>
+                    <button type="button" data-scenario="maximum">
+                        <span>Максимум</span>
+                        <strong>0 скв.</strong>
+                    </button>
+                </div>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric">
+                    <span>Площадь объекта</span>
+                    <strong data-metric="area">0 км²</strong>
+                    <small>по принятой маске</small>
+                </div>
+                <div class="metric">
+                    <span>Извлекаемый объём</span>
+                    <strong data-metric="volume">0 м³</strong>
+                    <small>с учётом NTG</small>
+                </div>
+                <div class="metric">
+                    <span>Уверенность U-Net</span>
+                    <strong data-metric="confidence">0%</strong>
+                    <small>средняя в пределах объекта</small>
+                </div>
+                <div class="metric">
+                    <span>Валовая стоимость</span>
+                    <strong data-metric="value">$0</strong>
+                    <small>без CAPEX, OPEX и налогов</small>
+                </div>
+            </div>
+
+            <section class="well-section">
+                <div class="section-title-row">
+                    <h4>КООРДИНАТЫ</h4>
+                    <span class="well-count">0 скв.</span>
+                </div>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>№</th>
+                                <th>X, м</th>
+                                <th>Y, м</th>
+                                <th>Уверенность</th>
+                                <th>Новая площадь</th>
+                                <th>Объём, м³</th>
+                                <th>Балл</th>
+                            </tr>
+                        </thead>
+                        <tbody class="well-table-body"></tbody>
+                    </table>
+                </div>
+                <div class="no-wells">Для принятой маски подходящие точки не найдены.</div>
+            </section>
+        </article>
+    </template>
+
+    <!-- Подключаем скрипт из папки static -->
+    <script src="/static/app.js"></script>
+</body>
+</html>

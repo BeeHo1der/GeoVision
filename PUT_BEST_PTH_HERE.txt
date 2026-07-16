@@ -1,0 +1,21 @@
+Place the real trained checkpoint in the project root and name it:
+
+best.pth
+
+Expected inference architecture:
+- segmentation_models_pytorch.Unet
+- encoder_name="resnet34"
+- in_channels=3
+- classes=2
+- positive class index=1
+- activation=None
+
+clDICE is a training loss and does not change the inference architecture.
+
+Supported checkpoint shapes:
+- raw state_dict
+- {"model_state_dict": state_dict}
+- {"state_dict": state_dict}
+- {"model": state_dict}
+
+Delete this note after adding the real best.pth.
